@@ -6,12 +6,12 @@ from linebot.v3.messaging import (
     MessagingApi,
     ReplyMessageRequest,
     TextMessage,
-    QuickReply,
-    QuickReplyItem,
-    MessageAction,
+    FlexMessage,
+    FlexContainer,
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
+import json
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
 from stress_test import (
@@ -48,107 +48,352 @@ def health_check():
     return "OK"
 
 
-def create_question_message(question, show_part=False):
-    """建立帶有 Quick Reply 的問題訊息"""
+def create_button_box(label, text_to_send):
+    """建立單一按鈕框"""
+    return {
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+            {
+                "type": "text",
+                "text": label,
+                "size": "md",
+                "color": "#333333",
+                "align": "center",
+                "wrap": True
+            }
+        ],
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "lg",
+        "paddingAll": "lg",
+        "action": {
+            "type": "message",
+            "text": text_to_send
+        },
+        "borderColor": "#DDDDDD",
+        "borderWidth": "normal"
+    }
+
+
+def create_question_flex(question, show_part=False):
+    """建立問題的 Flex Message"""
     options = question["options"]
     is_multiple = question.get("type") == "multiple"
 
-    # 建立 Quick Reply 按鈕
-    quick_reply_items = []
+    # 建立標題
+    header_text = ""
+    if show_part:
+        header_text = f"【{question['part']}】\n\n"
+    header_text += question["question"]
+
+    # 建立選項按鈕
+    button_contents = []
     for opt in options:
-        quick_reply_items.append(
-            QuickReplyItem(
-                action=MessageAction(
-                    label=opt["label"][:20],  # Quick Reply label 上限 20 字元
-                    text=opt["label"][0]  # 只發送 A, B, C, D
-                )
-            )
-        )
+        button_contents.append(create_button_box(opt["label"], opt["label"][0]))
+        button_contents.append({"type": "spacer", "size": "md"})
 
     # 多選題加入「完成」按鈕
     if is_multiple:
-        quick_reply_items.append(
-            QuickReplyItem(
-                action=MessageAction(label="✓ 完成", text="完成")
-            )
-        )
+        button_contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "✓ 完成選擇",
+                    "size": "md",
+                    "color": "#FFFFFF",
+                    "align": "center",
+                    "weight": "bold"
+                }
+            ],
+            "backgroundColor": "#06C755",
+            "cornerRadius": "lg",
+            "paddingAll": "lg",
+            "action": {
+                "type": "message",
+                "text": "完成"
+            }
+        })
 
-    # 組合題目文字
-    question_text = ""
-    if show_part:
-        question_text = f"【{question['part']}】\n\n"
-    question_text += question["question"]
+    # 移除最後的 spacer
+    if button_contents and button_contents[-1].get("type") == "spacer":
+        button_contents.pop()
 
-    # 顯示選項
-    question_text += "\n"
-    for opt in options:
-        question_text += f"\n{opt['label']}"
+    flex_content = {
+        "type": "bubble",
+        "size": "giga",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": header_text,
+                    "size": "md",
+                    "color": "#333333",
+                    "wrap": True,
+                    "weight": "bold"
+                },
+                {"type": "spacer", "size": "xl"},
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": button_contents,
+                    "spacing": "md"
+                }
+            ],
+            "backgroundColor": "#F5F5F5",
+            "paddingAll": "xl"
+        }
+    }
 
-    return TextMessage(
-        text=question_text,
-        quick_reply=QuickReply(items=quick_reply_items)
+    return FlexMessage(
+        alt_text=question["question"],
+        contents=FlexContainer.from_dict(flex_content)
     )
 
 
-def create_multiple_continue_message(question, selected):
-    """建立多選題繼續選擇的訊息"""
+def create_multiple_continue_flex(question, selected):
+    """建立多選題繼續選擇的 Flex Message"""
     selected_text = "、".join(selected)
+    options = question["options"]
 
-    quick_reply_items = []
-    for opt in question["options"]:
-        quick_reply_items.append(
-            QuickReplyItem(
-                action=MessageAction(
-                    label=opt["label"][:20],
-                    text=opt["label"][0]
-                )
-            )
-        )
-    quick_reply_items.append(
-        QuickReplyItem(
-            action=MessageAction(label="✓ 完成", text="完成")
-        )
+    # 建立選項按鈕
+    button_contents = []
+    for opt in options:
+        button_contents.append(create_button_box(opt["label"], opt["label"][0]))
+        button_contents.append({"type": "spacer", "size": "md"})
+
+    # 加入「完成」按鈕
+    button_contents.append({
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+            {
+                "type": "text",
+                "text": "✓ 完成選擇",
+                "size": "md",
+                "color": "#FFFFFF",
+                "align": "center",
+                "weight": "bold"
+            }
+        ],
+        "backgroundColor": "#06C755",
+        "cornerRadius": "lg",
+        "paddingAll": "lg",
+        "action": {
+            "type": "message",
+            "text": "完成"
+        }
+    })
+
+    flex_content = {
+        "type": "bubble",
+        "size": "giga",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"已選擇：{selected_text}",
+                    "size": "md",
+                    "color": "#06C755",
+                    "wrap": True,
+                    "weight": "bold"
+                },
+                {"type": "spacer", "size": "md"},
+                {
+                    "type": "text",
+                    "text": "還要選擇其他選項嗎？選完請按「完成選擇」",
+                    "size": "sm",
+                    "color": "#666666",
+                    "wrap": True
+                },
+                {"type": "spacer", "size": "xl"},
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": button_contents,
+                    "spacing": "md"
+                }
+            ],
+            "backgroundColor": "#F5F5F5",
+            "paddingAll": "xl"
+        }
+    }
+
+    return FlexMessage(
+        alt_text="請繼續選擇或按完成",
+        contents=FlexContainer.from_dict(flex_content)
     )
 
-    return TextMessage(
-        text=f"已選擇：{selected_text}\n\n還要選擇其他選項嗎？選完請按「完成」",
-        quick_reply=QuickReply(items=quick_reply_items)
-    )
 
-
-def create_result_message(result):
-    """建立測試結果訊息"""
-    # 用戶背景資訊
+def create_result_flex(result):
+    """建立測試結果的 Flex Message"""
     profile = result.get("profile", {})
-    profile_text = ""
 
-    if profile.get("Q5"):
-        challenges = profile["Q5"]
-        if isinstance(challenges, list) and challenges:
-            profile_text += f"\n📌 您的理財挑戰：{', '.join(challenges)}"
+    # 根據等級選擇顏色
+    if "綠色" in result['level']:
+        level_color = "#06C755"
+        bg_color = "#E8F5E9"
+    elif "黃色" in result['level']:
+        level_color = "#FFB800"
+        bg_color = "#FFF8E1"
+    else:
+        level_color = "#FF5555"
+        bg_color = "#FFEBEE"
 
-    if profile.get("Q7"):
-        profile_text += f"\n📌 年度理財預算：{profile['Q7']}"
+    # 建立內容
+    body_contents = [
+        {
+            "type": "text",
+            "text": "📊 財務壓力測試結果",
+            "size": "xl",
+            "color": "#333333",
+            "weight": "bold",
+            "align": "center"
+        },
+        {"type": "spacer", "size": "xl"},
+        {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": result['level'],
+                    "size": "lg",
+                    "color": level_color,
+                    "weight": "bold",
+                    "align": "center",
+                    "wrap": True
+                }
+            ],
+            "backgroundColor": bg_color,
+            "cornerRadius": "lg",
+            "paddingAll": "lg"
+        },
+        {"type": "spacer", "size": "lg"},
+        {
+            "type": "text",
+            "text": f"總分：{result['score']} / {result['max_score']} 分",
+            "size": "md",
+            "color": "#333333",
+            "align": "center",
+            "weight": "bold"
+        },
+        {"type": "spacer", "size": "xl"},
+        {
+            "type": "text",
+            "text": "📋 診斷",
+            "size": "md",
+            "color": "#333333",
+            "weight": "bold"
+        },
+        {
+            "type": "text",
+            "text": result['description'],
+            "size": "sm",
+            "color": "#666666",
+            "wrap": True
+        },
+        {"type": "spacer", "size": "lg"},
+        {
+            "type": "text",
+            "text": "💡 專家建議",
+            "size": "md",
+            "color": "#333333",
+            "weight": "bold"
+        },
+        {
+            "type": "text",
+            "text": result['suggestion'],
+            "size": "sm",
+            "color": "#666666",
+            "wrap": True
+        }
+    ]
 
-    if profile.get("Q8"):
-        profile_text += f"\n📌 最想解決的問題：{profile['Q8']}"
+    # 加入用戶背景資訊
+    if profile.get("Q5") or profile.get("Q7") or profile.get("Q8"):
+        body_contents.append({"type": "spacer", "size": "xl"})
+        body_contents.append({
+            "type": "separator",
+            "color": "#DDDDDD"
+        })
+        body_contents.append({"type": "spacer", "size": "lg"})
 
-    message = f"""📊 財務壓力測試結果
+        if profile.get("Q5"):
+            challenges = profile["Q5"]
+            if isinstance(challenges, list) and challenges:
+                body_contents.append({
+                    "type": "text",
+                    "text": f"📌 您的理財挑戰：{', '.join(challenges)}",
+                    "size": "sm",
+                    "color": "#666666",
+                    "wrap": True
+                })
 
-{result['level']}
+        if profile.get("Q7"):
+            body_contents.append({
+                "type": "text",
+                "text": f"📌 年度理財預算：{profile['Q7']}",
+                "size": "sm",
+                "color": "#666666",
+                "wrap": True
+            })
 
-總分：{result['score']} / {result['max_score']} 分
+        if profile.get("Q8"):
+            body_contents.append({
+                "type": "text",
+                "text": f"📌 最想解決的問題：{profile['Q8']}",
+                "size": "sm",
+                "color": "#666666",
+                "wrap": True
+            })
 
-📋 診斷：
-{result['description']}
+    # 加入重新測試按鈕
+    body_contents.append({"type": "spacer", "size": "xl"})
+    body_contents.append({
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+            {
+                "type": "text",
+                "text": "🔄 重新測試",
+                "size": "md",
+                "color": "#333333",
+                "align": "center"
+            }
+        ],
+        "backgroundColor": "#FFFFFF",
+        "cornerRadius": "lg",
+        "paddingAll": "md",
+        "action": {
+            "type": "message",
+            "text": "財務壓力測試"
+        },
+        "borderColor": "#DDDDDD",
+        "borderWidth": "normal"
+    })
 
-💡 專家建議：
-{result['suggestion']}{profile_text}
+    flex_content = {
+        "type": "bubble",
+        "size": "giga",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": body_contents,
+            "backgroundColor": "#F5F5F5",
+            "paddingAll": "xl"
+        }
+    }
 
----
-感謝您完成測試！如需再次測試，請輸入「財務壓力測試」。"""
-
-    return TextMessage(text=message)
+    return FlexMessage(
+        alt_text=f"測試結果：{result['level']}",
+        contents=FlexContainer.from_dict(flex_content)
+    )
 
 
 @handler.add(MessageEvent, message=TextMessageContent)
@@ -161,7 +406,6 @@ def handle_text_message(event):
 
         # 檢查是否要開始測試
         if user_message in ["財務壓力測試", "開始測試", "壓力測試", "測試"]:
-            # 如果已在測試中，先取消
             if is_user_in_test(user_id):
                 cancel_test(user_id)
 
@@ -174,7 +418,7 @@ def handle_text_message(event):
                      "完成後將為您分析財務健康狀況並提供專家建議。\n\n"
                      "讓我們開始吧！"
             )
-            question_message = create_question_message(question, show_part=True)
+            question_message = create_question_flex(question, show_part=True)
 
             line_bot_api.reply_message(
                 ReplyMessageRequest(
@@ -216,8 +460,8 @@ def handle_text_message(event):
                             ReplyMessageRequest(
                                 reply_token=event.reply_token,
                                 messages=[
-                                    TextMessage(text="請選擇 A、B、C、D 或輸入「完成」。"),
-                                    create_multiple_continue_message(current_question, selected)
+                                    TextMessage(text="請選擇選項或按「完成選擇」。"),
+                                    create_multiple_continue_flex(current_question, selected)
                                 ]
                             )
                         )
@@ -226,20 +470,18 @@ def handle_text_message(event):
                             ReplyMessageRequest(
                                 reply_token=event.reply_token,
                                 messages=[
-                                    TextMessage(text="請選擇 A、B、C 或 D。"),
-                                    create_question_message(current_question)
+                                    TextMessage(text="請點選下方選項。"),
+                                    create_question_flex(current_question)
                                 ]
                             )
                         )
                 else:
-                    num_options = len(current_question["options"])
-                    valid_options = ["A", "B", "C", "D"][:num_options]
                     line_bot_api.reply_message(
                         ReplyMessageRequest(
                             reply_token=event.reply_token,
                             messages=[
-                                TextMessage(text=f"請選擇 {', '.join(valid_options)} 其中一個選項。"),
-                                create_question_message(current_question)
+                                TextMessage(text="請點選下方選項。"),
+                                create_question_flex(current_question)
                             ]
                         )
                     )
@@ -247,26 +489,24 @@ def handle_text_message(event):
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
-                        messages=[create_multiple_continue_message(data["question"], data["selected"])]
+                        messages=[create_multiple_continue_flex(data["question"], data["selected"])]
                     )
                 )
             elif status == "next":
-                # 檢查是否換了新的 part
-                current_q = get_current_question(user_id)
                 prev_index = user_sessions_get_prev_index(user_id)
                 show_part = should_show_part(prev_index, data)
 
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
-                        messages=[create_question_message(data, show_part=show_part)]
+                        messages=[create_question_flex(data, show_part=show_part)]
                     )
                 )
             elif status == "complete":
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
-                        messages=[create_result_message(data)]
+                        messages=[create_result_flex(data)]
                     )
                 )
             return
