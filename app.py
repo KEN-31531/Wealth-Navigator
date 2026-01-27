@@ -11,7 +11,6 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from linebot.v3.exceptions import InvalidSignatureError
-import json
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
 from stress_test import (
@@ -71,7 +70,8 @@ def create_button_box(label, text_to_send):
             "text": text_to_send
         },
         "borderColor": "#DDDDDD",
-        "borderWidth": "normal"
+        "borderWidth": "normal",
+        "margin": "md"
     }
 
 
@@ -90,7 +90,6 @@ def create_question_flex(question, show_part=False):
     button_contents = []
     for opt in options:
         button_contents.append(create_button_box(opt["label"], opt["label"][0]))
-        button_contents.append({"type": "spacer", "size": "md"})
 
     # 多選題加入「完成」按鈕
     if is_multiple:
@@ -110,15 +109,12 @@ def create_question_flex(question, show_part=False):
             "backgroundColor": "#06C755",
             "cornerRadius": "lg",
             "paddingAll": "lg",
+            "margin": "xl",
             "action": {
                 "type": "message",
                 "text": "完成"
             }
         })
-
-    # 移除最後的 spacer
-    if button_contents and button_contents[-1].get("type") == "spacer":
-        button_contents.pop()
 
     flex_content = {
         "type": "bubble",
@@ -135,12 +131,11 @@ def create_question_flex(question, show_part=False):
                     "wrap": True,
                     "weight": "bold"
                 },
-                {"type": "spacer", "size": "xl"},
                 {
                     "type": "box",
                     "layout": "vertical",
                     "contents": button_contents,
-                    "spacing": "md"
+                    "margin": "xl"
                 }
             ],
             "backgroundColor": "#F5F5F5",
@@ -163,7 +158,6 @@ def create_multiple_continue_flex(question, selected):
     button_contents = []
     for opt in options:
         button_contents.append(create_button_box(opt["label"], opt["label"][0]))
-        button_contents.append({"type": "spacer", "size": "md"})
 
     # 加入「完成」按鈕
     button_contents.append({
@@ -182,6 +176,7 @@ def create_multiple_continue_flex(question, selected):
         "backgroundColor": "#06C755",
         "cornerRadius": "lg",
         "paddingAll": "lg",
+        "margin": "xl",
         "action": {
             "type": "message",
             "text": "完成"
@@ -197,26 +192,25 @@ def create_multiple_continue_flex(question, selected):
             "contents": [
                 {
                     "type": "text",
-                    "text": f"已選擇：{selected_text}",
+                    "text": f"✓ 已選擇：{selected_text}",
                     "size": "md",
                     "color": "#06C755",
                     "wrap": True,
                     "weight": "bold"
                 },
-                {"type": "spacer", "size": "md"},
                 {
                     "type": "text",
                     "text": "還要選擇其他選項嗎？選完請按「完成選擇」",
                     "size": "sm",
                     "color": "#666666",
-                    "wrap": True
+                    "wrap": True,
+                    "margin": "md"
                 },
-                {"type": "spacer", "size": "xl"},
                 {
                     "type": "box",
                     "layout": "vertical",
                     "contents": button_contents,
-                    "spacing": "md"
+                    "margin": "xl"
                 }
             ],
             "backgroundColor": "#F5F5F5",
@@ -255,7 +249,6 @@ def create_result_flex(result):
             "weight": "bold",
             "align": "center"
         },
-        {"type": "spacer", "size": "xl"},
         {
             "type": "box",
             "layout": "vertical",
@@ -272,57 +265,64 @@ def create_result_flex(result):
             ],
             "backgroundColor": bg_color,
             "cornerRadius": "lg",
-            "paddingAll": "lg"
+            "paddingAll": "lg",
+            "margin": "xl"
         },
-        {"type": "spacer", "size": "lg"},
         {
             "type": "text",
             "text": f"總分：{result['score']} / {result['max_score']} 分",
             "size": "md",
             "color": "#333333",
             "align": "center",
-            "weight": "bold"
+            "weight": "bold",
+            "margin": "lg"
         },
-        {"type": "spacer", "size": "xl"},
+        {
+            "type": "separator",
+            "color": "#DDDDDD",
+            "margin": "xl"
+        },
         {
             "type": "text",
             "text": "📋 診斷",
             "size": "md",
             "color": "#333333",
-            "weight": "bold"
+            "weight": "bold",
+            "margin": "xl"
         },
         {
             "type": "text",
             "text": result['description'],
             "size": "sm",
             "color": "#666666",
-            "wrap": True
+            "wrap": True,
+            "margin": "md"
         },
-        {"type": "spacer", "size": "lg"},
         {
             "type": "text",
             "text": "💡 專家建議",
             "size": "md",
             "color": "#333333",
-            "weight": "bold"
+            "weight": "bold",
+            "margin": "xl"
         },
         {
             "type": "text",
             "text": result['suggestion'],
             "size": "sm",
             "color": "#666666",
-            "wrap": True
+            "wrap": True,
+            "margin": "md"
         }
     ]
 
     # 加入用戶背景資訊
     if profile.get("Q5") or profile.get("Q7") or profile.get("Q8"):
-        body_contents.append({"type": "spacer", "size": "xl"})
         body_contents.append({
             "type": "separator",
-            "color": "#DDDDDD"
+            "color": "#DDDDDD",
+            "margin": "xl"
         })
-        body_contents.append({"type": "spacer", "size": "lg"})
 
         if profile.get("Q5"):
             challenges = profile["Q5"]
@@ -332,7 +332,8 @@ def create_result_flex(result):
                     "text": f"📌 您的理財挑戰：{', '.join(challenges)}",
                     "size": "sm",
                     "color": "#666666",
-                    "wrap": True
+                    "wrap": True,
+                    "margin": "lg"
                 })
 
         if profile.get("Q7"):
@@ -341,7 +342,8 @@ def create_result_flex(result):
                 "text": f"📌 年度理財預算：{profile['Q7']}",
                 "size": "sm",
                 "color": "#666666",
-                "wrap": True
+                "wrap": True,
+                "margin": "sm"
             })
 
         if profile.get("Q8"):
@@ -350,11 +352,11 @@ def create_result_flex(result):
                 "text": f"📌 最想解決的問題：{profile['Q8']}",
                 "size": "sm",
                 "color": "#666666",
-                "wrap": True
+                "wrap": True,
+                "margin": "sm"
             })
 
     # 加入重新測試按鈕
-    body_contents.append({"type": "spacer", "size": "xl"})
     body_contents.append({
         "type": "box",
         "layout": "vertical",
@@ -370,6 +372,7 @@ def create_result_flex(result):
         "backgroundColor": "#FFFFFF",
         "cornerRadius": "lg",
         "paddingAll": "md",
+        "margin": "xl",
         "action": {
             "type": "message",
             "text": "財務壓力測試"
