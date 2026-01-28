@@ -41,6 +41,10 @@ def process_answer(user_id, answer):
 
     # 處理多選題的「完成選擇」
     if question_type == "multiple" and answer.strip() in ["完成", "完成選擇", "OK", "ok", "下一題", "好了", "確定"]:
+        # 檢查是否至少選擇了一個選項
+        if not session.get("multi_answers"):
+            return "need_selection", current_question
+
         # 儲存多選答案到 profile
         question_key = f"Q{session['current_question'] + 1}"
         session["profile"][question_key] = session.get("multi_answers", [])

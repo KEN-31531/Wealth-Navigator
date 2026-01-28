@@ -9,7 +9,7 @@ from linebot.v3.messaging import (
     FlexMessage,
     FlexContainer,
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent, FollowEvent
 from linebot.v3.exceptions import InvalidSignatureError
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
@@ -21,6 +21,16 @@ from stress_test import (
     get_multiple_selections,
     cancel_test,
     get_current_question,
+)
+from user_registration import (
+    is_user_registered,
+    is_user_in_registration,
+    start_registration,
+    process_registration,
+    get_registration_state,
+)
+from google_sheets import (
+    update_test_result,
 )
 
 app = Flask(__name__)
@@ -100,7 +110,7 @@ def create_question_flex(question, show_part=False):
     for opt in options:
         button_contents.append(create_button_box(opt["label"], opt["label"][0], use_postback=is_multiple))
 
-    # 多選題加入「完成」按鈕
+    # 多選題加入「完成」按鈕（初始為灰色，選擇後才變色）
     if is_multiple:
         button_contents.append({
             "type": "box",
@@ -108,20 +118,22 @@ def create_question_flex(question, show_part=False):
             "contents": [
                 {
                     "type": "text",
-                    "text": "✓ 完成選擇",
+                    "text": "完成選擇",
                     "size": "md",
-                    "color": "#FFFFFF",
-                    "align": "center",
-                    "weight": "bold"
+                    "color": "#999999",
+                    "align": "center"
                 }
             ],
-            "backgroundColor": "#06C755",
+            "backgroundColor": "#FFFFFF",
             "cornerRadius": "lg",
             "paddingAll": "lg",
             "margin": "xl",
+            "borderColor": "#DDDDDD",
+            "borderWidth": "normal",
             "action": {
-                "type": "message",
-                "text": "完成"
+                "type": "postback",
+                "label": "完成選擇",
+                "data": "complete_multiple"
             }
         })
 
@@ -169,7 +181,7 @@ def create_multiple_continue_flex(question, selected):
         is_selected = value in selected
 
         if is_selected:
-            # 已選擇：綠色背景 + 白字 + 打勾（點擊可取消選擇）
+            # 已選擇：亮黃色背景 + 白字 + 打勾（點擊可取消選擇）
             button_contents.append({
                 "type": "box",
                 "layout": "vertical",
@@ -184,7 +196,7 @@ def create_multiple_continue_flex(question, selected):
                         "weight": "bold"
                     }
                 ],
-                "backgroundColor": "#06C755",
+                "backgroundColor": "#FFE153",
                 "cornerRadius": "lg",
                 "paddingAll": "lg",
                 "action": {
@@ -212,7 +224,7 @@ def create_multiple_continue_flex(question, selected):
                 "weight": "bold"
             }
         ],
-        "backgroundColor": "#1E88E5",
+        "backgroundColor": "#408080",
         "cornerRadius": "lg",
         "paddingAll": "lg",
         "margin": "xl",
@@ -262,8 +274,8 @@ def create_result_flex(result):
 
     # 根據等級選擇顏色
     if "綠色" in result['level']:
-        level_color = "#06C755"
-        bg_color = "#E8F5E9"
+        level_color = "#FFE153"
+        bg_color = "#FDF6E3"
     elif "黃色" in result['level']:
         level_color = "#FFB800"
         bg_color = "#FFF8E1"
@@ -388,6 +400,31 @@ def create_result_flex(result):
                 "margin": "sm"
             })
 
+    # 加入查看完整解說按鈕（PDF）
+    body_contents.append({
+        "type": "box",
+        "layout": "vertical",
+        "contents": [
+            {
+                "type": "text",
+                "text": "🎁 領取三招抗通膨秘笈",
+                "size": "md",
+                "color": "#FFFFFF",
+                "align": "center",
+                "weight": "bold"
+            }
+        ],
+        "backgroundColor": "#408080",
+        "cornerRadius": "lg",
+        "paddingAll": "md",
+        "margin": "xl",
+        "action": {
+            "type": "uri",
+            "label": "領取三招抗通膨秘笈",
+            "uri": "https://drive.google.com/file/d/1EJ3NQ0f_DLZX75RCLM3OQRAHx61L7jZM/view?usp=sharing"
+        }
+    })
+
     # 加入重新測試按鈕
     body_contents.append({
         "type": "box",
@@ -404,7 +441,7 @@ def create_result_flex(result):
         "backgroundColor": "#FFFFFF",
         "cornerRadius": "lg",
         "paddingAll": "md",
-        "margin": "xl",
+        "margin": "md",
         "action": {
             "type": "message",
             "text": "財務壓力測試"
@@ -431,6 +468,42 @@ def create_result_flex(result):
     )
 
 
+@handler.add(FollowEvent)
+def handle_follow(event):
+    """處理用戶加入好友事件"""
+    user_id = event.source.user_id
+
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+
+        # 開始註冊流程
+        result = start_registration(user_id)
+
+        if result == "already_registered":
+            # 已註冊用戶，顯示歡迎訊息
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[
+                        TextMessage(
+                            text="歡迎回來！\n\n"
+                                 "請輸入「財務壓力測試」開始測試。"
+                        )
+                    ]
+                )
+            )
+        else:
+            # 新用戶，開始註冊
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[
+                        TextMessage(text="請輸入你的姓名：")
+                    ]
+                )
+            )
+
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
     user_id = event.source.user_id
@@ -438,6 +511,103 @@ def handle_text_message(event):
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
+
+        # 檢查是否在註冊流程中
+        if is_user_in_registration(user_id):
+            status, data = process_registration(user_id, user_message)
+
+            if status == "waiting_payment_code":
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[
+                            TextMessage(
+                                text=f"您好，{data}！\n\n"
+                                     "請輸入您的「匯款帳號後五碼」："
+                            )
+                        ]
+                    )
+                )
+                return
+
+            elif status == "invalid_code":
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[
+                            TextMessage(
+                                text="❌ 格式錯誤\n\n"
+                                     "匯款後五碼應為 5 位數字，請重新輸入："
+                            )
+                        ]
+                    )
+                )
+                return
+
+            elif status == "completed":
+                # 建立註冊完成 + 開始測試按鈕的 Flex Message
+                flex_content = {
+                    "type": "bubble",
+                    "size": "kilo",
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "✅ 導航上線",
+                                "size": "lg",
+                                "color": "#333333",
+                                "weight": "bold"
+                            },
+                            {
+                                "type": "text",
+                                "text": f"姓名：{data['name']}\n匯款後五碼：{data['payment_code']}",
+                                "size": "sm",
+                                "color": "#666666",
+                                "wrap": True,
+                                "margin": "lg"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "vertical",
+                                "contents": [
+                                    {
+                                        "type": "text",
+                                        "text": "📋 開始財務壓力測試",
+                                        "size": "md",
+                                        "color": "#FFFFFF",
+                                        "align": "center",
+                                        "weight": "bold"
+                                    }
+                                ],
+                                "backgroundColor": "#408080",
+                                "cornerRadius": "lg",
+                                "paddingAll": "lg",
+                                "margin": "xl",
+                                "action": {
+                                    "type": "message",
+                                    "text": "財務壓力測試"
+                                }
+                            }
+                        ],
+                        "backgroundColor": "#F5F5F5",
+                        "paddingAll": "xl"
+                    }
+                }
+
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[
+                            FlexMessage(
+                                alt_text="註冊完成",
+                                contents=FlexContainer.from_dict(flex_content)
+                            )
+                        ]
+                    )
+                )
+                return
 
         # 檢查是否要開始測試
         if user_message in ["財務壓力測試", "開始測試", "壓力測試", "測試"]:
@@ -538,6 +708,9 @@ def handle_text_message(event):
                     )
                 )
             elif status == "complete":
+                # 更新 Google Sheets 測試結果
+                update_test_result(user_id, data['score'], data['level'])
+
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
@@ -598,7 +771,18 @@ def handle_postback(event):
         if postback_data == "complete_multiple":
             status, data = process_answer(user_id, "完成")
 
-            if status == "next":
+            if status == "need_selection":
+                # 用戶還沒選擇任何選項，提示並重新顯示題目
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[
+                            TextMessage(text="請至少選擇一個選項"),
+                            create_question_flex(data)
+                        ]
+                    )
+                )
+            elif status == "next":
                 prev_index = user_sessions_get_prev_index(user_id)
                 show_part = should_show_part(prev_index, data)
                 line_bot_api.reply_message(
@@ -608,6 +792,9 @@ def handle_postback(event):
                     )
                 )
             elif status == "complete":
+                # 更新 Google Sheets 測試結果
+                update_test_result(user_id, data['score'], data['level'])
+
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
