@@ -9,7 +9,7 @@ from linebot.v3.messaging import (
     FlexMessage,
     FlexContainer,
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
 from linebot.v3.exceptions import InvalidSignatureError
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
@@ -47,8 +47,20 @@ def health_check():
     return "OK"
 
 
-def create_button_box(label, text_to_send):
+def create_button_box(label, data, use_postback=False):
     """建立單一按鈕框"""
+    if use_postback:
+        action = {
+            "type": "postback",
+            "label": label,
+            "data": data
+        }
+    else:
+        action = {
+            "type": "message",
+            "text": data
+        }
+
     return {
         "type": "box",
         "layout": "vertical",
@@ -65,10 +77,7 @@ def create_button_box(label, text_to_send):
         "backgroundColor": "#FFFFFF",
         "cornerRadius": "lg",
         "paddingAll": "lg",
-        "action": {
-            "type": "message",
-            "text": text_to_send
-        },
+        "action": action,
         "borderColor": "#DDDDDD",
         "borderWidth": "normal",
         "margin": "md"
@@ -86,10 +95,10 @@ def create_question_flex(question, show_part=False):
         header_text = f"【{question['part']}】\n\n"
     header_text += question["question"]
 
-    # 建立選項按鈕
+    # 建立選項按鈕（多選題用 postback，單選題用 message）
     button_contents = []
     for opt in options:
-        button_contents.append(create_button_box(opt["label"], opt["label"][0]))
+        button_contents.append(create_button_box(opt["label"], opt["label"][0], use_postback=is_multiple))
 
     # 多選題加入「完成」按鈕
     if is_multiple:
@@ -150,14 +159,44 @@ def create_question_flex(question, show_part=False):
 
 
 def create_multiple_continue_flex(question, selected):
-    """建立多選題繼續選擇的 Flex Message"""
-    selected_text = "、".join(selected)
+    """建立多選題繼續選擇的 Flex Message（已選項目會反色顯示）"""
     options = question["options"]
 
-    # 建立選項按鈕
+    # 建立選項按鈕（已選的反色顯示）
     button_contents = []
     for opt in options:
-        button_contents.append(create_button_box(opt["label"], opt["label"][0]))
+        value = opt.get("value", opt["label"])
+        is_selected = value in selected
+
+        if is_selected:
+            # 已選擇：綠色背景 + 白字 + 打勾（點擊可取消選擇）
+            button_contents.append({
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": f"✓ {opt['label']}",
+                        "size": "md",
+                        "color": "#FFFFFF",
+                        "align": "center",
+                        "wrap": True,
+                        "weight": "bold"
+                    }
+                ],
+                "backgroundColor": "#06C755",
+                "cornerRadius": "lg",
+                "paddingAll": "lg",
+                "action": {
+                    "type": "postback",
+                    "label": opt["label"],
+                    "data": f"toggle:{opt['label'][0]}"
+                },
+                "margin": "md"
+            })
+        else:
+            # 未選擇：白色背景
+            button_contents.append(create_button_box(opt["label"], opt["label"][0], use_postback=True))
 
     # 加入「完成」按鈕
     button_contents.append({
@@ -173,13 +212,14 @@ def create_multiple_continue_flex(question, selected):
                 "weight": "bold"
             }
         ],
-        "backgroundColor": "#06C755",
+        "backgroundColor": "#1E88E5",
         "cornerRadius": "lg",
         "paddingAll": "lg",
         "margin": "xl",
         "action": {
-            "type": "message",
-            "text": "完成"
+            "type": "postback",
+            "label": "完成選擇",
+            "data": "complete_multiple"
         }
     })
 
@@ -192,19 +232,11 @@ def create_multiple_continue_flex(question, selected):
             "contents": [
                 {
                     "type": "text",
-                    "text": f"✓ 已選擇：{selected_text}",
+                    "text": question["question"],
                     "size": "md",
-                    "color": "#06C755",
+                    "color": "#333333",
                     "wrap": True,
                     "weight": "bold"
-                },
-                {
-                    "type": "text",
-                    "text": "還要選擇其他選項嗎？選完請按「完成選擇」",
-                    "size": "sm",
-                    "color": "#666666",
-                    "wrap": True,
-                    "margin": "md"
                 },
                 {
                     "type": "box",
@@ -547,6 +579,67 @@ def should_show_part(prev_index, current_question):
     prev_part = QUESTIONS[prev_index].get("part", "")
     current_part = current_question.get("part", "")
     return prev_part != current_part
+
+
+@handler.add(PostbackEvent)
+def handle_postback(event):
+    """處理 postback 事件（多選題用）"""
+    user_id = event.source.user_id
+    postback_data = event.postback.data
+
+    with ApiClient(configuration) as api_client:
+        line_bot_api = MessagingApi(api_client)
+
+        # 檢查是否在測試中
+        if not is_user_in_test(user_id):
+            return
+
+        # 處理「完成選擇」
+        if postback_data == "complete_multiple":
+            status, data = process_answer(user_id, "完成")
+
+            if status == "next":
+                prev_index = user_sessions_get_prev_index(user_id)
+                show_part = should_show_part(prev_index, data)
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[create_question_flex(data, show_part=show_part)]
+                    )
+                )
+            elif status == "complete":
+                line_bot_api.reply_message(
+                    ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[create_result_flex(data)]
+                    )
+                )
+            return
+
+        # 處理選項選擇（toggle:A, toggle:B 等，或直接是 A, B, C, D）
+        if postback_data.startswith("toggle:"):
+            answer = postback_data.split(":")[1]
+        else:
+            answer = postback_data
+
+        status, data = process_answer(user_id, answer)
+
+        if status == "multiple_continue":
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[create_multiple_continue_flex(data["question"], data["selected"])]
+                )
+            )
+        elif status == "invalid":
+            current_question = get_current_question(user_id)
+            selected = get_multiple_selections(user_id)
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[create_multiple_continue_flex(current_question, selected)]
+                )
+            )
 
 
 if __name__ == "__main__":

@@ -80,10 +80,14 @@ def process_answer(user_id, answer):
 
     selected_option = current_question["options"][option_index]
 
-    # 處理多選題
+    # 處理多選題（支援 toggle：再點一次取消選擇）
     if question_type == "multiple":
         value = selected_option.get("value", selected_option["label"])
-        if value not in session["multi_answers"]:
+        if value in session["multi_answers"]:
+            # 已選擇 -> 取消選擇
+            session["multi_answers"].remove(value)
+        else:
+            # 未選擇 -> 加入選擇
             session["multi_answers"].append(value)
 
         return "multiple_continue", {
