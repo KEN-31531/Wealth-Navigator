@@ -3,6 +3,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import os
+import json
 
 # Google Sheets 設定
 SPREADSHEET_ID = "1L9m-Vq1J9iN_daSJ-K1lLuObl5fkGW6ImWSUTSZUYMo"
@@ -23,9 +24,19 @@ def get_sheet():
                 "https://www.googleapis.com/auth/spreadsheets",
                 "https://www.googleapis.com/auth/drive"
             ]
-            credentials = Credentials.from_service_account_file(
-                CREDENTIALS_FILE, scopes=scopes
-            )
+
+            # 優先使用環境變數，否則使用檔案
+            google_creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+            if google_creds_json:
+                creds_dict = json.loads(google_creds_json)
+                credentials = Credentials.from_service_account_info(
+                    creds_dict, scopes=scopes
+                )
+            else:
+                credentials = Credentials.from_service_account_file(
+                    CREDENTIALS_FILE, scopes=scopes
+                )
+
             _client = gspread.authorize(credentials)
             _sheet = _client.open_by_key(SPREADSHEET_ID).sheet1
         except Exception as e:
