@@ -1,9 +1,17 @@
 """Google Sheets CRM 整合"""
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import os
 import json
+
+# 台灣時區 (UTC+8)
+TW_TIMEZONE = timezone(timedelta(hours=8))
+
+
+def get_tw_time():
+    """取得台灣時間"""
+    return datetime.now(TW_TIMEZONE).strftime("%Y/%m/%d %H:%M")
 
 # Google Sheets 設定
 SPREADSHEET_ID = "1L9m-Vq1J9iN_daSJ-K1lLuObl5fkGW6ImWSUTSZUYMo"
@@ -53,7 +61,7 @@ def add_user_registration(user_id, name):
         return False
 
     try:
-        now = datetime.now().strftime("%Y/%m/%d %H:%M")
+        now = get_tw_time()
         row = [
             user_id,           # A: Line ID
             name,              # B: 姓名
@@ -84,7 +92,7 @@ def update_test_result(user_id, score, level):
             return False
 
         row = cell.row
-        now = datetime.now().strftime("%Y/%m/%d %H:%M")
+        now = get_tw_time()
 
         # 更新測試分數、等級、時間
         sheet.update_cell(row, 4, score)      # D 欄：測試分數
@@ -234,7 +242,7 @@ def complete_registration_persistent(user_id, payment_code=None):
 
         row = sheet.row_values(cell.row)
         name = row[1] if len(row) > 1 else ""
-        now = datetime.now().strftime("%Y/%m/%d %H:%M")
+        now = get_tw_time()
 
         # 更新註冊時間、狀態
         sheet.update_cell(cell.row, 3, now)           # C 欄：註冊時間
