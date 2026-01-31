@@ -287,7 +287,7 @@ def create_result_flex(result):
     body_contents = [
         {
             "type": "text",
-            "text": "📊 財務壓力測試結果",
+            "text": "📊 VIP 財富健康體檢表結果",
             "size": "xl",
             "color": "#333333",
             "weight": "bold",
@@ -444,7 +444,7 @@ def create_result_flex(result):
         "margin": "md",
         "action": {
             "type": "message",
-            "text": "財務壓力測試"
+            "text": "VIP 財富健康體檢表"
         },
         "borderColor": "#DDDDDD",
         "borderWidth": "normal"
@@ -487,7 +487,7 @@ def handle_follow(event):
                     messages=[
                         TextMessage(
                             text="歡迎回來！\n\n"
-                                 "請輸入「財務壓力測試」開始測試。"
+                                 "請輸入「VIP 財富健康體檢表」開始測試。"
                         )
                     ]
                 )
@@ -516,35 +516,7 @@ def handle_text_message(event):
         if is_user_in_registration(user_id):
             status, data = process_registration(user_id, user_message)
 
-            if status == "waiting_payment_code":
-                line_bot_api.reply_message(
-                    ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[
-                            TextMessage(
-                                text=f"您好，{data}！\n\n"
-                                     "請輸入您的「匯款帳號後五碼」："
-                            )
-                        ]
-                    )
-                )
-                return
-
-            elif status == "invalid_code":
-                line_bot_api.reply_message(
-                    ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[
-                            TextMessage(
-                                text="❌ 格式錯誤\n\n"
-                                     "匯款後五碼應為 5 位數字，請重新輸入："
-                            )
-                        ]
-                    )
-                )
-                return
-
-            elif status == "completed":
+            if status == "completed":
                 # 建立註冊完成 + 開始測試按鈕的 Flex Message
                 flex_content = {
                     "type": "bubble",
@@ -555,18 +527,10 @@ def handle_text_message(event):
                         "contents": [
                             {
                                 "type": "text",
-                                "text": "✅ 導航上線",
+                                "text": f"{data['name']}，歡迎加入！",
                                 "size": "lg",
                                 "color": "#333333",
                                 "weight": "bold"
-                            },
-                            {
-                                "type": "text",
-                                "text": f"姓名：{data['name']}\n匯款後五碼：{data['payment_code']}",
-                                "size": "sm",
-                                "color": "#666666",
-                                "wrap": True,
-                                "margin": "lg"
                             },
                             {
                                 "type": "box",
@@ -574,7 +538,7 @@ def handle_text_message(event):
                                 "contents": [
                                     {
                                         "type": "text",
-                                        "text": "📋 開始財務壓力測試",
+                                        "text": "開始導航",
                                         "size": "md",
                                         "color": "#FFFFFF",
                                         "align": "center",
@@ -587,7 +551,7 @@ def handle_text_message(event):
                                 "margin": "xl",
                                 "action": {
                                     "type": "message",
-                                    "text": "財務壓力測試"
+                                    "text": "VIP 財富健康體檢表"
                                 }
                             }
                         ],
@@ -610,15 +574,15 @@ def handle_text_message(event):
                 return
 
         # 檢查是否要開始測試
-        if user_message in ["財務壓力測試", "開始測試", "壓力測試", "測試"]:
+        if user_message in ["VIP 財富健康體檢表", "開始測試", "壓力測試", "測試"]:
             if is_user_in_test(user_id):
                 cancel_test(user_id)
 
             question = start_test(user_id)
 
             intro_message = TextMessage(
-                text="📋 財務壓力測試\n\n"
-                     "歡迎參加財務壓力測試！\n"
+                text="📋 VIP 財富健康體檢表\n\n"
+                     "歡迎參加VIP 財富健康體檢表！\n"
                      "本測試共 8 題，請根據您的實際狀況選擇最符合的答案。\n\n"
                      "完成後將為您分析財務健康狀況並提供專家建議。\n\n"
                      "讓我們開始吧！"
@@ -640,7 +604,7 @@ def handle_text_message(event):
                 line_bot_api.reply_message(
                     ReplyMessageRequest(
                         reply_token=event.reply_token,
-                        messages=[TextMessage(text="已取消測試。如需重新開始，請輸入「財務壓力測試」。")]
+                        messages=[TextMessage(text="已取消測試。如需重新開始，請輸入「VIP 財富健康體檢表」。")]
                     )
                 )
             else:
@@ -726,7 +690,7 @@ def handle_text_message(event):
                 messages=[
                     TextMessage(
                         text="歡迎使用財富導航！\n\n"
-                             "請輸入「財務壓力測試」開始測試您的財務健康狀況。"
+                             "請輸入「VIP 財富健康體檢表」開始測試您的財務健康狀況。"
                     )
                 ]
             )

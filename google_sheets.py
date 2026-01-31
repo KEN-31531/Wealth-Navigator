@@ -46,7 +46,7 @@ def get_sheet():
     return _sheet
 
 
-def add_user_registration(user_id, name, payment_code):
+def add_user_registration(user_id, name):
     """新增用戶註冊資料"""
     sheet = get_sheet()
     if sheet is None:
@@ -55,15 +55,14 @@ def add_user_registration(user_id, name, payment_code):
     try:
         now = datetime.now().strftime("%Y/%m/%d %H:%M")
         row = [
-            user_id,           # Line ID
-            name,              # 姓名
-            payment_code,      # 匯款後五碼
-            now,               # 註冊時間
-            "",                # 測試分數
-            "",                # 測試等級
-            "",                # 測試時間
-            "待追蹤",          # 客戶狀態
-            ""                 # 備註
+            user_id,           # A: Line ID
+            name,              # B: 姓名
+            now,               # C: 註冊時間
+            "",                # D: 測試分數
+            "",                # E: 測試等級
+            "",                # F: 測試時間
+            "待追蹤",          # G: 客戶狀態
+            ""                 # H: 備註
         ]
         sheet.append_row(row)
         return True
@@ -88,9 +87,9 @@ def update_test_result(user_id, score, level):
         now = datetime.now().strftime("%Y/%m/%d %H:%M")
 
         # 更新測試分數、等級、時間
-        sheet.update_cell(row, 5, score)      # E 欄：測試分數
-        sheet.update_cell(row, 6, level)      # F 欄：測試等級
-        sheet.update_cell(row, 7, now)        # G 欄：測試時間
+        sheet.update_cell(row, 4, score)      # D 欄：測試分數
+        sheet.update_cell(row, 5, level)      # E 欄：測試等級
+        sheet.update_cell(row, 6, now)        # F 欄：測試時間
         return True
     except Exception as e:
         print(f"更新測試結果錯誤: {e}")
@@ -112,13 +111,12 @@ def get_user_by_id(user_id):
         return {
             "user_id": row[0] if len(row) > 0 else "",
             "name": row[1] if len(row) > 1 else "",
-            "payment_code": row[2] if len(row) > 2 else "",
-            "register_time": row[3] if len(row) > 3 else "",
-            "score": row[4] if len(row) > 4 else "",
-            "level": row[5] if len(row) > 5 else "",
-            "test_time": row[6] if len(row) > 6 else "",
-            "status": row[7] if len(row) > 7 else "",
-            "note": row[8] if len(row) > 8 else ""
+            "register_time": row[2] if len(row) > 2 else "",
+            "score": row[3] if len(row) > 3 else "",
+            "level": row[4] if len(row) > 4 else "",
+            "test_time": row[5] if len(row) > 5 else "",
+            "status": row[6] if len(row) > 6 else "",
+            "note": row[7] if len(row) > 7 else ""
         }
     except Exception as e:
         print(f"查詢用戶錯誤: {e}")
@@ -153,8 +151,8 @@ def start_registration_persistent(user_id):
         if cell is not None:
             # 已存在，檢查是否已完成註冊
             row = sheet.row_values(cell.row)
-            payment_code = row[2] if len(row) > 2 else ""
-            if payment_code and len(payment_code) == 5 and payment_code.isdigit():
+            register_time = row[2] if len(row) > 2 else ""
+            if register_time:
                 # 已完成註冊
                 return "already_registered"
             # 未完成，繼續使用現有記錄
@@ -162,15 +160,14 @@ def start_registration_persistent(user_id):
 
         # 新建記錄（只有 LINE ID）
         row = [
-            user_id,    # Line ID
-            "",         # 姓名（待填）
-            "",         # 匯款後五碼（待填）
-            "",         # 註冊時間（完成時填入）
-            "",         # 測試分數
-            "",         # 測試等級
-            "",         # 測試時間
-            "註冊中",   # 客戶狀態
-            ""          # 備註
+            user_id,    # A: Line ID
+            "",         # B: 姓名（待填）
+            "",         # C: 註冊時間（完成時填入）
+            "",         # D: 測試分數
+            "",         # E: 測試等級
+            "",         # F: 測試時間
+            "註冊中",   # G: 客戶狀態
+            ""          # H: 備註
         ]
         sheet.append_row(row)
         return True
@@ -192,13 +189,13 @@ def get_registration_state_persistent(user_id):
 
         row = sheet.row_values(cell.row)
         name = row[1] if len(row) > 1 else ""
-        payment_code = row[2] if len(row) > 2 else ""
+        register_time = row[2] if len(row) > 2 else ""
 
         # 判斷狀態
-        if payment_code and len(payment_code) == 5 and payment_code.isdigit():
+        if register_time:
             return "completed"
         elif name:
-            return "waiting_payment_code"
+            return "completed"  # 有姓名就算完成
         else:
             return "waiting_name"
     except Exception as e:
@@ -224,8 +221,8 @@ def update_registration_name(user_id, name):
         return False
 
 
-def complete_registration_persistent(user_id, payment_code):
-    """完成註冊（更新匯款後五碼和時間）"""
+def complete_registration_persistent(user_id, payment_code=None):
+    """完成註冊（更新註冊時間）"""
     sheet = get_sheet()
     if sheet is None:
         return None
@@ -239,12 +236,11 @@ def complete_registration_persistent(user_id, payment_code):
         name = row[1] if len(row) > 1 else ""
         now = datetime.now().strftime("%Y/%m/%d %H:%M")
 
-        # 更新匯款後五碼、註冊時間、狀態
-        sheet.update_cell(cell.row, 3, payment_code)  # C 欄：匯款後五碼
-        sheet.update_cell(cell.row, 4, now)           # D 欄：註冊時間
-        sheet.update_cell(cell.row, 8, "待追蹤")      # H 欄：客戶狀態
+        # 更新註冊時間、狀態
+        sheet.update_cell(cell.row, 3, now)           # C 欄：註冊時間
+        sheet.update_cell(cell.row, 7, "待追蹤")      # G 欄：客戶狀態
 
-        return {"name": name, "payment_code": payment_code}
+        return {"name": name}
     except Exception as e:
         print(f"完成註冊錯誤: {e}")
         return None
