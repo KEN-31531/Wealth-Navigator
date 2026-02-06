@@ -59,11 +59,11 @@ app.py（Flask 伺服器、LINE webhook 處理器、Flex Message 建構器）
 
 ## 環境變數
 
-| 變數                           | 必要 | 說明                                                                                    |
-| ------------------------------ | ---- | --------------------------------------------------------------------------------------- |
-| `LINE_CHANNEL_SECRET`          | 是   | LINE Bot channel secret                                                                 |
-| `LINE_CHANNEL_ACCESS_TOKEN`    | 是   | LINE Bot access token                                                                   |
-| `GOOGLE_CREDENTIALS`           | 否   | Google 服務帳號憑證的 JSON 字串（若未設定，會退而使用 `google_credentials.json` 檔案）   |
+| 變數 | 必要 | 說明 |
+| --- | --- | --- |
+| `LINE_CHANNEL_SECRET` | 是 | LINE Bot channel secret |
+| `LINE_CHANNEL_ACCESS_TOKEN` | 是 | LINE Bot access token |
+| `GOOGLE_CREDENTIALS` | 否 | Google 服務帳號憑證的 JSON 字串（若未設定，會退而使用 `google_credentials.json` 檔案） |
 
 ## 主要依賴套件
 
