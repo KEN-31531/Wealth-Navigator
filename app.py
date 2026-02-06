@@ -683,18 +683,8 @@ def handle_text_message(event):
                 )
             return
 
-        # 預設回覆
-        line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[
-                    TextMessage(
-                        text="歡迎使用財富導航！\n\n"
-                             "請輸入「VIP 財富健康體檢表」開始測試您的財務健康狀況。"
-                    )
-                ]
-            )
-        )
+        # 非指定訊息不回覆
+        pass
 
 
 def user_sessions_get_prev_index(user_id):
